@@ -1,6 +1,6 @@
 // Service worker: guarda o app no celular para abrir offline.
 // Busca a versão nova na internet primeiro e só usa a guardada quando está offline.
-const CACHE = 'vitaminas-v4';
+const CACHE = 'vitaminas-v5';
 const ASSETS = [
   './',
   './index.html',
@@ -15,7 +15,7 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
+  event.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS.map((u) => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (event) => {
@@ -32,7 +32,7 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(req.url);
 
   event.respondWith(
-    fetch(req).then((res) => {
+    fetch(req, { cache: 'no-store' }).then((res) => {
       if (res.ok && url.origin === location.origin) {
         const copy = res.clone();
         caches.open(CACHE).then((c) => c.put(req, copy));
