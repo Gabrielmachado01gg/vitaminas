@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Minhas vitaminas</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="description" content="Checklist diário de vitaminas e remédio.">
+
+<meta name="theme-color" content="#F3F6F3" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0F1613" media="(prefers-color-scheme: dark)">
+<meta name="color-scheme" content="light dark">
+
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Vitaminas">
+<meta name="format-detection" content="telephone=no">
+
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+  <main id="view" class="view" tabindex="-1"></main>
+
+  <nav class="tabbar" aria-label="Navegação principal">
+    <button class="tab" data-tab="hoje" aria-current="page">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 11.2 12 4.5l7.5 6.7V19a1 1 0 0 1-1 1h-4v-5.5h-5V20h-4a1 1 0 0 1-1-1z"/></svg>
+      <span>Hoje</span>
+    </button>
+    <button class="tab" data-tab="calendario">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5.5" width="16" height="14.5" rx="3"/><path d="M4 10h16M8.5 3.5v4M15.5 3.5v4"/></svg>
+      <span>Calendário</span>
+    </button>
+    <button class="tab" data-tab="ajustes">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h9M17 8h3M4 16h3M11 16h9"/><circle cx="15" cy="8" r="2.2"/><circle cx="9" cy="16" r="2.2"/></svg>
+      <span>Ajustes</span>
+    </button>
+  </nav>
+
+  <div id="sheet-root" class="sheet-root" hidden>
+    <div class="scrim" data-close></div>
+    <section class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+      <div class="grabber" aria-hidden="true"></div>
+      <header class="sheet-head">
+        <div>
+          <h2 id="sheet-title"></h2>
+          <p id="sheet-sub" class="muted"></p>
+        </div>
+        <button class="icon-btn" data-close aria-label="Fechar">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg>
+        </button>
+      </header>
+      <ul id="sheet-list" class="list"></ul>
+    </section>
+  </div>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
