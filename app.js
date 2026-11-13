@@ -229,11 +229,87 @@
           <div class="field">
             <input type="text" value="${esc(i.name)}" maxlength="28" aria-label="Nome" data-f="name" autocomplete="off" autocapitalize="sentences">
             <input type="time" value="${i.time}" aria-label="Horário de ${esc(i.name)}" data-f="time">
+            ${i.custom ? '<button class="link-del" data-del>Remover item</button>' : ''}
           </div>
           <button class="switch" role="switch" aria-checked="${i.active}" aria-label="Ativar ${esc(i.name)}" data-f="active"></button>
         </li>`).join('')}
       </ul>
+      <button class="btn ghost block" id="add-item">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5.5v13M5.5 12h13"/></svg>Adicionar item
+      </button>
+
+      <h2 class="sec-title">Lembretes no iPhone</h2>
+      <p class="set-sub">Cria um lembrete diário "Tomar ..." no Calendário para cada item ativo, com aviso na tela de bloqueio na hora marcada.</p>
+      <button class="btn block" id="export-ics">Criar lembretes no Calendário</button>
+      <p class="note" id="ics-msg">Depois de tocar, escolha Calendário (ou Salvar em Arquivos e abra o arquivo) e toque em Adicionar tudo. Mudou um horário? Apague os lembretes "Tomar ..." antigos no Calendário e crie de novo.</p>
+
       <p class="note">Os horários são só uma sugestão. Siga sempre a orientação do seu médico ou nutricionista. Seus dados ficam guardados neste celular.</p>`;
+  }
+
+  /* ---------- Novos itens ---------- */
+  const NEW_HUES = [96, 150, 200, 20, 60, 330, 120, 190];
+  const abbrOf = (name) => {
+    const s = (name.trim().split(/\s+/)[0] || '?').slice(0, 2);
+    return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+  };
+
+  function addItem() {
+    const n = state.items.filter((i) => i.custom).length;
+    const item = { id: 'x' + Date.now().toString(36), name: 'Novo item', abbr: 'No', hue: NEW_HUES[n % NEW_HUES.length], time: '08:00', active: true, custom: true };
+    state.items.push(item);
+    save();
+    renderSettings();
+    const input = view.querySelector(`.set-row[data-id="${item.id}"] input[data-f="name"]`);
+    if (input) { input.scrollIntoView({ block: 'center' }); input.focus(); input.select(); }
+  }
+
+  /* ---------- Lembretes no Calendário (.ics) ---------- */
+  const icsText = (s) => String(s).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
+
+  function buildICS() {
+    const now = new Date();
+    const stamp = `${now.getUTCFullYear()}${pad(now.getUTCMonth() + 1)}${pad(now.getUTCDate())}T${pad(now.getUTCHours())}${pad(now.getUTCMinutes())}${pad(now.getUTCSeconds())}Z`;
+    const day = todayKey().replace(/-/g, '');
+    const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Minhas vitaminas//PT-BR//', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH'];
+    activeItems().forEach((i) => {
+      const [h, m] = i.time.split(':').map(Number);
+      const end = new Date(2000, 0, 1, h, m + 10);
+      const title = `Tomar ${i.name}`;
+      lines.push(
+        'BEGIN:VEVENT',
+        `UID:${i.id}-${now.getTime()}@minhas-vitaminas`,
+        `DTSTAMP:${stamp}`,
+        `DTSTART:${day}T${pad(h)}${pad(m)}00`,
+        `DTEND:${day}T${pad(end.getHours())}${pad(end.getMinutes())}00`,
+        'RRULE:FREQ=DAILY',
+        `SUMMARY:${icsText(title)}`,
+        'BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${icsText(title)}`, 'TRIGGER:PT0S', 'END:VALARM',
+        'END:VEVENT'
+      );
+    });
+    lines.push('END:VCALENDAR');
+    return lines.join('\r\n') + '\r\n';
+  }
+
+  async function exportICS() {
+    const msg = document.getElementById('ics-msg');
+    if (!activeItems().length) { if (msg) msg.textContent = 'Ative pelo menos um item para criar lembretes.'; return; }
+    const blob = new Blob([buildICS()], { type: 'text/calendar' });
+    const file = new File([blob], 'lembretes-vitaminas.ics', { type: 'text/calendar' });
+    try {
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: 'Lembretes de vitaminas' });
+        return;
+      }
+    } catch (e) {
+      if (e && e.name === 'AbortError') return;
+    }
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'lembretes-vitaminas.ics';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
   }
 
   /* ---------- Painel do dia ---------- */
@@ -317,6 +393,23 @@
     if (e.target.closest('#prev')) { calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() - 1, 1); renderCalendar(); return; }
     if (e.target.closest('#next')) { calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() + 1, 1); renderCalendar(); return; }
 
+    if (e.target.closest('#add-item')) return addItem();
+    if (e.target.closest('#export-ics')) return exportICS();
+
+    const del = e.target.closest('[data-del]');
+    if (del) {
+      if (del.dataset.armed) {
+        const id = del.closest('.set-row').dataset.id;
+        state.items = state.items.filter((i) => i.id !== id);
+        save();
+        return renderSettings();
+      }
+      del.dataset.armed = '1';
+      del.textContent = 'Toque de novo para remover';
+      setTimeout(() => { if (del.isConnected) { delete del.dataset.armed; del.textContent = 'Remover item'; } }, 3000);
+      return;
+    }
+
     const sw = e.target.closest('.switch');
     if (sw) {
       const li = sw.closest('.set-row');
@@ -332,7 +425,18 @@
     const f = e.target.dataset.f;
     if (!f) return;
     const item = state.items.find((i) => i.id === e.target.closest('.set-row').dataset.id);
-    if (f === 'name') { const v = e.target.value.trim(); if (v) { item.name = v; save(); } }
+    if (f === 'name') {
+      const v = e.target.value.trim();
+      if (v) {
+        item.name = v;
+        if (item.custom) {
+          item.abbr = abbrOf(v);
+          const chip = e.target.closest('.set-row').querySelector('.chip');
+          if (chip) chip.textContent = item.abbr;
+        }
+        save();
+      }
+    }
     if (f === 'time' && e.target.value) { item.time = e.target.value; save(); }
   });
 

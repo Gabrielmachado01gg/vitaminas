@@ -1,6 +1,6 @@
 // Service worker: guarda o app no celular para abrir offline.
-// Ao mudar qualquer arquivo, aumente o número da versão abaixo.
-const CACHE = 'vitaminas-v1';
+// Busca a versão nova na internet primeiro e só usa a guardada quando está offline.
+const CACHE = 'vitaminas-v2';
 const ASSETS = [
   './',
   './index.html',
@@ -30,15 +30,12 @@ self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;
   event.respondWith(
-    caches.match(req).then((hit) => {
-      if (hit) return hit;
-      return fetch(req).then((res) => {
-        if (res.ok && new URL(req.url).origin === location.origin) {
-          const copy = res.clone();
-          caches.open(CACHE).then((c) => c.put(req, copy));
-        }
-        return res;
-      }).catch(() => (req.mode === 'navigate' ? caches.match('./index.html') : undefined));
-    })
+    fetch(req).then((res) => {
+      if (res.ok && new URL(req.url).origin === location.origin) {
+        const copy = res.clone();
+        caches.open(CACHE).then((c) => c.put(req, copy));
+      }
+      return res;
+    }).catch(() => caches.match(req).then((hit) => hit || (req.mode === 'navigate' ? caches.match('./index.html') : undefined)))
   );
 });
