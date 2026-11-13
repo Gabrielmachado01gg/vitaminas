@@ -239,12 +239,12 @@
       </button>
 
       <h2 class="sec-title">Lembretes no iPhone</h2>
-      <p class="set-sub">Cria um lembrete diário "Tomar ..." no Calendário para cada item, com aviso na tela de bloqueio na hora marcada.</p>
-      <a class="btn block" href="lembretes.ics" id="ics-link">Adicionar lembretes ao Calendário</a>
-      <p class="note" id="ics-msg">Toque e, na tela que abrir, toque em Adicionar tudo. Usa os horários padrão (manhã às 08:00, cúrcuma às 13:00, Anti às 20:00, magnésio às 21:00).</p>
-      <button class="link-del" id="export-ics" style="margin:6px 4px 0">Mudei horários ou itens: gerar com os meus</button>
+      <p class="set-sub">Cria um lembrete diário "Tomar ..." no Calendário para cada item ativo, com aviso na tela de bloqueio na hora marcada.</p>
+      <a class="btn block" href="lembretes.ics" id="ics-link" target="_blank" rel="noopener">Adicionar lembretes ao Calendário</a>
+      <p class="note" id="ics-msg">Usa os nomes e horários que estão acima. Toque e, na tela que abrir, toque em Adicionar tudo. Mudou algo depois? Apague os lembretes "Tomar ..." antigos no Calendário e toque de novo.</p>
 
       <p class="note">Os horários são só uma sugestão. Siga sempre a orientação do seu médico ou nutricionista. Seus dados ficam guardados neste celular.</p>`;
+    refreshIcsLink();
   }
 
   /* ---------- Novos itens ---------- */
@@ -264,53 +264,15 @@
     if (input) { input.scrollIntoView({ block: 'center' }); input.focus(); input.select(); }
   }
 
-  /* ---------- Lembretes no Calendário (.ics) ---------- */
-  const icsText = (s) => String(s).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
-
-  function buildICS() {
-    const now = new Date();
-    const stamp = `${now.getUTCFullYear()}${pad(now.getUTCMonth() + 1)}${pad(now.getUTCDate())}T${pad(now.getUTCHours())}${pad(now.getUTCMinutes())}${pad(now.getUTCSeconds())}Z`;
-    const day = todayKey().replace(/-/g, '');
-    const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Minhas vitaminas//PT-BR//', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH'];
-    activeItems().forEach((i) => {
-      const [h, m] = i.time.split(':').map(Number);
-      const end = new Date(2000, 0, 1, h, m + 10);
-      const title = `Tomar ${i.name}`;
-      lines.push(
-        'BEGIN:VEVENT',
-        `UID:${i.id}-${now.getTime()}@minhas-vitaminas`,
-        `DTSTAMP:${stamp}`,
-        `DTSTART:${day}T${pad(h)}${pad(m)}00`,
-        `DTEND:${day}T${pad(end.getHours())}${pad(end.getMinutes())}00`,
-        'RRULE:FREQ=DAILY',
-        `SUMMARY:${icsText(title)}`,
-        'BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${icsText(title)}`, 'TRIGGER:PT0S', 'END:VALARM',
-        'END:VEVENT'
-      );
-    });
-    lines.push('END:VCALENDAR');
-    return lines.join('\r\n') + '\r\n';
+  /* ---------- Lembretes no Calendário ---------- */
+  // O arquivo .ics é montado pelo service worker a partir deste endereço (ver sw.js).
+  function icsHref() {
+    const c = activeItems().map((i) => `${encodeURIComponent(i.name.replace(/[|~]/g, ' '))}|${i.time.replace(':', '')}`).join('~');
+    return `lembretes.ics?c=${c}`;
   }
-
-  async function exportICS() {
-    const msg = document.getElementById('ics-msg');
-    if (!activeItems().length) { if (msg) msg.textContent = 'Ative pelo menos um item para criar lembretes.'; return; }
-    const blob = new Blob([buildICS()], { type: 'text/calendar' });
-    const file = new File([blob], 'lembretes-vitaminas.ics', { type: 'text/calendar' });
-    try {
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({ files: [file], title: 'Lembretes de vitaminas' });
-        return;
-      }
-    } catch (e) {
-      if (e && e.name === 'AbortError') return;
-    }
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'lembretes-vitaminas.ics';
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+  function refreshIcsLink() {
+    const a = document.getElementById('ics-link');
+    if (a) a.setAttribute('href', icsHref());
   }
 
   /* ---------- Painel do dia ---------- */
@@ -395,7 +357,16 @@
     if (e.target.closest('#next')) { calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() + 1, 1); renderCalendar(); return; }
 
     if (e.target.closest('#add-item')) return addItem();
-    if (e.target.closest('#export-ics')) return exportICS();
+    const ics = e.target.closest('#ics-link');
+    if (ics) {
+      const msg = document.getElementById('ics-msg');
+      if (!activeItems().length) { e.preventDefault(); msg.textContent = 'Ative pelo menos um item para criar lembretes.'; return; }
+      if (!(navigator.serviceWorker && navigator.serviceWorker.controller)) {
+        e.preventDefault();
+        msg.textContent = 'Quase lá: feche e abra o app uma vez e toque de novo.';
+      }
+      return;
+    }
 
     const del = e.target.closest('[data-del]');
     if (del) {
@@ -419,12 +390,14 @@
       sw.setAttribute('aria-checked', String(item.active));
       li.classList.toggle('off', !item.active);
       save();
+      refreshIcsLink();
     }
   });
 
   view.addEventListener('input', (e) => {
     const f = e.target.dataset.f;
     if (!f) return;
+    setTimeout(refreshIcsLink, 0);
     const item = state.items.find((i) => i.id === e.target.closest('.set-row').dataset.id);
     if (f === 'name') {
       const v = e.target.value.trim();
