@@ -268,7 +268,6 @@
 
   /* ---------- Avisos (notificações push) ---------- */
   const WORKER_URL = 'https://vitaminas-avisos.gabrielolwmachado.workers.dev';
-  const VAPID_PUBLIC = 'BCAt5lMp6E4sZU_9VBkNE3HrUzmWWItIk-zGH4WCbpReS2RFI530Qmb4tp8PCfkmVJjuxQ1ntRmQNcQfv6Dtd9U';
   const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   const isStandalone = window.navigator.standalone === true || (window.matchMedia && matchMedia('(display-mode: standalone)').matches);
   const pushSupported = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
@@ -286,6 +285,30 @@
     return r.json();
   }
 
+  let vapidKey = null;
+  async function getKey() {
+    if (vapidKey) return vapidKey;
+    const r = await fetch(WORKER_URL + '/key');
+    if (!r.ok) throw new Error('key ' + r.status);
+    vapidKey = (await r.json()).key;
+    return vapidKey;
+  }
+  const sameKey = (sub, key) => {
+    const k = sub.options && sub.options.applicationServerKey;
+    if (!k) return true;
+    const a = new Uint8Array(k), b = urlB64(key);
+    return a.length === b.length && a.every((v, i) => v === b[i]);
+  };
+  // Garante uma inscrição que combine com a chave atual do servidor (refaz se a chave mudou).
+  async function ensureSub(create) {
+    const reg = await navigator.serviceWorker.ready;
+    const key = await getKey();
+    let sub = await reg.pushManager.getSubscription();
+    if (sub && !sameKey(sub, key)) { await sub.unsubscribe(); sub = null; }
+    if (!sub && create) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlB64(key) });
+    return sub;
+  }
+
   async function getSub() {
     if (!pushSupported) return null;
     const reg = await navigator.serviceWorker.ready;
@@ -298,8 +321,8 @@
   // Manda ao servidor a lista atual de itens e horários (só se os avisos estiverem ligados).
   async function pushSync() {
     try {
-      const sub = await getSub();
-      if (!sub) return;
+      if (!(await getSub()) || Notification.permission !== 'granted') return;
+      const sub = await ensureSub(true);
       await api('/subscribe', { subscription: sub.toJSON(), items: payloadItems(), tz: tzName() });
     } catch (e) { /* tenta de novo na próxima mudança ou ao abrir o app */ }
   }
@@ -343,9 +366,7 @@
       if (!activeItems().length) { pushMsg = 'Ative pelo menos um item para receber avisos.'; return; }
       const perm = await Notification.requestPermission();
       if (perm !== 'granted') { pushMsg = 'Sem permissão não dá para avisar. Libere em Ajustes do iPhone > Notificações > Minhas vitaminas.'; return; }
-      const reg = await navigator.serviceWorker.ready;
-      let sub = await reg.pushManager.getSubscription();
-      if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlB64(VAPID_PUBLIC) });
+      const sub = await ensureSub(true);
       await api('/subscribe', { subscription: sub.toJSON(), items: payloadItems(), tz: tzName() });
       const t = await api('/test', { endpoint: sub.endpoint }).catch(() => null);
       pushMsg = t && t.ok ? 'Pronto! Enviei um aviso de teste agora.' : `Avisos ligados, mas o teste falhou${t ? ` (${t.status}${t.detail ? ': ' + t.detail : ''})` : ''}.`;
@@ -375,9 +396,10 @@
 
   async function pushTest() {
     try {
-      const sub = await getSub();
-      if (!sub) return;
+      if (!(await getSub())) return;
       pushMsg = 'Enviando aviso de teste...'; pushUI();
+      const sub = await ensureSub(true);
+      await api('/subscribe', { subscription: sub.toJSON(), items: payloadItems(), tz: tzName() });
       const r = await api('/test', { endpoint: sub.endpoint });
       pushMsg = r.ok ? 'Aviso de teste enviado.' : `O teste falhou (${r.status}${r.detail ? ': ' + r.detail : ''}).`;
     } catch (e) { pushMsg = 'Não consegui falar com o servidor agora (' + (e && e.message ? e.message : 'erro') + ').'; }
