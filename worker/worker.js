@@ -5,7 +5,7 @@
 
 const APP_ORIGIN = 'https://gabrielmachado01gg.github.io';
 const SUBJECT = 'https://gabrielmachado01gg.github.io/vitaminas/';
-const VAPID_PUBLIC = 'BPbqag6fV_3n51rciOcjsfqDxi-bMFOjtCalvn6apa2qjUXV7azwNbWEaM-8tBTKBLy0Zc7GDobQtOt2cbL6z3E';
+const VAPID_PUBLIC = 'BCAt5lMp6E4sZU_9VBkNE3HrUzmWWItIk-zGH4WCbpReS2RFI530Qmb4tp8PCfkmVJjuxQ1ntRmQNcQfv6Dtd9U';
 const MAX_SUBS = 20;
 
 const enc = new TextEncoder();
