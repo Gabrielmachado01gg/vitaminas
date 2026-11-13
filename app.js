@@ -239,9 +239,10 @@
       </button>
 
       <h2 class="sec-title">Lembretes no iPhone</h2>
-      <p class="set-sub">Cria um lembrete diário "Tomar ..." no Calendário para cada item ativo, com aviso na tela de bloqueio na hora marcada.</p>
-      <button class="btn block" id="export-ics">Criar lembretes no Calendário</button>
-      <p class="note" id="ics-msg">Depois de tocar, escolha Calendário (ou Salvar em Arquivos e abra o arquivo) e toque em Adicionar tudo. Mudou um horário? Apague os lembretes "Tomar ..." antigos no Calendário e crie de novo.</p>
+      <p class="set-sub">Cria um lembrete diário "Tomar ..." no Calendário para cada item, com aviso na tela de bloqueio na hora marcada.</p>
+      <a class="btn block" href="lembretes.ics" id="ics-link">Adicionar lembretes ao Calendário</a>
+      <p class="note" id="ics-msg">Toque e, na tela que abrir, toque em Adicionar tudo. Usa os horários padrão (manhã às 08:00, cúrcuma às 13:00, Anti às 20:00, magnésio às 21:00).</p>
+      <button class="link-del" id="export-ics" style="margin:6px 4px 0">Mudei horários ou itens: gerar com os meus</button>
 
       <p class="note">Os horários são só uma sugestão. Siga sempre a orientação do seu médico ou nutricionista. Seus dados ficam guardados neste celular.</p>`;
   }

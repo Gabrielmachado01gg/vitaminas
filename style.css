@@ -335,3 +335,7 @@ svg { display: block; fill: none; stroke: currentColor; stroke-width: 1.8; strok
 .sec-title { font-size: 20px; letter-spacing: -.01em; margin: 32px 4px 6px; }
 .sec-title + .set-sub { margin-bottom: 4px; }
 .link-del { align-self: flex-start; min-height: 36px; padding: 0; font-size: 14px; color: var(--warn); text-decoration: underline; text-underline-offset: 3px; }
+
+.btn { text-decoration: none; }
+.link-del { color: var(--primary); }
+.field .link-del { color: var(--warn); }
