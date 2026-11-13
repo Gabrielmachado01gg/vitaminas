@@ -23,3 +23,9 @@ Alternativa mais rápida: arraste a pasta em https://app.netlify.com/drop e copi
 - Os dados ficam guardados só no celular dela. Se ela apagar o app ou limpar os dados do Safari, o histórico some.
 - Os horários iniciais são sugestões. Ela pode mudar tudo em Ajustes.
 - Se você alterar algum arquivo depois de publicar, aumente o número em `CACHE` no `sw.js` (ex: `vitaminas-v2`) para o celular baixar a versão nova.
+
+## Avisos (notificações)
+
+- Em Ajustes > Avisos no celular, ela toca em "Ativar avisos" e permite as notificações. Só funciona no app instalado na Tela de Início (iOS 16.4 ou mais novo).
+- O servidor de avisos fica na pasta `worker/` (Cloudflare Workers, plano grátis, roda todo minuto). O app envia a ele os nomes e horários dos itens ativos sempre que algo muda em Ajustes.
+- O segredo `VAPID_PRIVATE` fica só na Cloudflare. Nunca coloque no repositório.

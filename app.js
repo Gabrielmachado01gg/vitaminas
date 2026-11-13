@@ -238,13 +238,14 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5.5v13M5.5 12h13"/></svg>Adicionar item
       </button>
 
-      <h2 class="sec-title">Lembretes no iPhone</h2>
-      <p class="set-sub">Cria um lembrete diário "Tomar ..." no Calendário para cada item ativo, com aviso na tela de bloqueio na hora marcada.</p>
-      <a class="btn block" href="lembretes.ics" id="ics-link" target="_blank" rel="noopener">Adicionar lembretes ao Calendário</a>
-      <p class="note" id="ics-msg">Usa os nomes e horários que estão acima. Toque e, na tela que abrir, toque em Adicionar tudo. Mudou algo depois? Apague os lembretes "Tomar ..." antigos no Calendário e toque de novo.</p>
+      <h2 class="sec-title">Avisos no celular</h2>
+      <p class="set-sub">Receba uma notificação na hora de cada item ativo, com o nome e o horário que estão acima.</p>
+      <button class="btn block" id="push-btn" type="button">Ativar avisos</button>
+      <button class="btn ghost block" id="push-test" type="button" hidden>Enviar aviso de teste</button>
+      <p class="note" id="push-msg"></p>
 
       <p class="note">Os horários são só uma sugestão. Siga sempre a orientação do seu médico ou nutricionista. Seus dados ficam guardados neste celular.</p>`;
-    refreshIcsLink();
+    pushUI();
   }
 
   /* ---------- Novos itens ---------- */
@@ -259,20 +260,128 @@
     const item = { id: 'x' + Date.now().toString(36), name: 'Novo item', abbr: 'No', hue: NEW_HUES[n % NEW_HUES.length], time: '08:00', active: true, custom: true };
     state.items.push(item);
     save();
+    pushSyncSoon();
     renderSettings();
     const input = view.querySelector(`.set-row[data-id="${item.id}"] input[data-f="name"]`);
     if (input) { input.scrollIntoView({ block: 'center' }); input.focus(); input.select(); }
   }
 
-  /* ---------- Lembretes no Calendário ---------- */
-  // O arquivo .ics é montado pelo service worker a partir deste endereço (ver sw.js).
-  function icsHref() {
-    const c = activeItems().map((i) => `${encodeURIComponent(i.name.replace(/[|~]/g, ' '))}|${i.time.replace(':', '')}`).join('~');
-    return `lembretes.ics?c=${c}`;
+  /* ---------- Avisos (notificações push) ---------- */
+  const WORKER_URL = 'https://vitaminas-avisos.gabrielolwmachado.workers.dev';
+  const VAPID_PUBLIC = 'BCAt5lMp6E4sZU_9VBkNE3HrUzmWWItIk-zGH4WCbpReS2RFI530Qmb4tp8PCfkmVJjuxQ1ntRmQNcQfv6Dtd9U';
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const isStandalone = window.navigator.standalone === true || (window.matchMedia && matchMedia('(display-mode: standalone)').matches);
+  const pushSupported = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+  let pushMsg = '';
+  let pushBusy = false;
+
+  const urlB64 = (b64) => {
+    const p = (b64 + '='.repeat((4 - (b64.length % 4)) % 4)).replace(/-/g, '+').replace(/_/g, '/');
+    return Uint8Array.from(atob(p), (c) => c.charCodeAt(0));
+  };
+
+  async function api(path, body) {
+    const r = await fetch(WORKER_URL + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (!r.ok) throw new Error(path + ' ' + r.status);
+    return r.json();
   }
-  function refreshIcsLink() {
-    const a = document.getElementById('ics-link');
-    if (a) a.setAttribute('href', icsHref());
+
+  async function getSub() {
+    if (!pushSupported) return null;
+    const reg = await navigator.serviceWorker.ready;
+    return reg.pushManager.getSubscription();
+  }
+
+  const payloadItems = () => activeItems().map((i) => ({ name: i.name, time: i.time }));
+  const tzName = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Sao_Paulo'; } catch (e) { return 'America/Sao_Paulo'; } };
+
+  // Manda ao servidor a lista atual de itens e horários (só se os avisos estiverem ligados).
+  async function pushSync() {
+    try {
+      const sub = await getSub();
+      if (!sub) return;
+      await api('/subscribe', { subscription: sub.toJSON(), items: payloadItems(), tz: tzName() });
+    } catch (e) { /* tenta de novo na próxima mudança ou ao abrir o app */ }
+  }
+  let syncTimer = null;
+  function pushSyncSoon() {
+    if (!pushSupported || !/^https?:$/.test(location.protocol)) return;
+    clearTimeout(syncTimer);
+    syncTimer = setTimeout(pushSync, 800);
+  }
+
+  async function pushUI() {
+    const btn = document.getElementById('push-btn');
+    const test = document.getElementById('push-test');
+    const msg = document.getElementById('push-msg');
+    if (!btn) return;
+    let on = false;
+    if (!pushSupported) {
+      btn.hidden = true;
+      msg.textContent = isIOS && !isStandalone
+        ? 'No iPhone, os avisos só funcionam pelo app instalado: toque em Compartilhar, depois em "Adicionar à Tela de Início", abra pelo ícone e volte aqui.'
+        : 'Este navegador não permite avisos. No iPhone, instale o app na Tela de Início e abra por lá.';
+      return;
+    }
+    try { on = !!(await getSub()) && Notification.permission === 'granted'; } catch (e) { on = false; }
+    if (!btn.isConnected) return;
+    btn.hidden = false;
+    btn.disabled = pushBusy;
+    btn.textContent = on ? 'Desativar avisos' : 'Ativar avisos';
+    btn.classList.toggle('ghost', on);
+    test.hidden = !on;
+    if (pushMsg) msg.textContent = pushMsg;
+    else if (Notification.permission === 'denied') msg.textContent = 'Os avisos estão bloqueados. Abra Ajustes do iPhone > Notificações > Minhas vitaminas e permita.';
+    else if (on) msg.textContent = 'Avisos ligados. Se você mudar um nome ou horário, o aviso muda junto.';
+    else msg.textContent = 'Toque em Ativar avisos e permita as notificações quando o iPhone perguntar.';
+  }
+
+  async function pushEnable() {
+    if (pushBusy) return;
+    pushBusy = true; pushMsg = ''; pushUI();
+    try {
+      if (!activeItems().length) { pushMsg = 'Ative pelo menos um item para receber avisos.'; return; }
+      const perm = await Notification.requestPermission();
+      if (perm !== 'granted') { pushMsg = 'Sem permissão não dá para avisar. Libere em Ajustes do iPhone > Notificações > Minhas vitaminas.'; return; }
+      const reg = await navigator.serviceWorker.ready;
+      let sub = await reg.pushManager.getSubscription();
+      if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlB64(VAPID_PUBLIC) });
+      await api('/subscribe', { subscription: sub.toJSON(), items: payloadItems(), tz: tzName() });
+      await api('/test', { endpoint: sub.endpoint }).catch(() => {});
+      pushMsg = 'Pronto! Enviei um aviso de teste agora.';
+    } catch (e) {
+      pushMsg = 'Não consegui ligar os avisos. Confira a internet e tente de novo.';
+    } finally {
+      pushBusy = false; pushUI();
+    }
+  }
+
+  async function pushDisable() {
+    if (pushBusy) return;
+    pushBusy = true; pushMsg = ''; pushUI();
+    try {
+      const sub = await getSub();
+      if (sub) {
+        await api('/unsubscribe', { endpoint: sub.endpoint }).catch(() => {});
+        await sub.unsubscribe();
+      }
+      pushMsg = 'Avisos desligados.';
+    } catch (e) {
+      pushMsg = 'Não consegui desligar agora. Tente de novo.';
+    } finally {
+      pushBusy = false; pushUI();
+    }
+  }
+
+  async function pushTest() {
+    try {
+      const sub = await getSub();
+      if (!sub) return;
+      pushMsg = 'Enviando aviso de teste...'; pushUI();
+      await api('/test', { endpoint: sub.endpoint });
+      pushMsg = 'Aviso de teste enviado.';
+    } catch (e) { pushMsg = 'Não consegui enviar o teste agora.'; }
+    pushUI();
   }
 
   /* ---------- Painel do dia ---------- */
@@ -357,16 +466,11 @@
     if (e.target.closest('#next')) { calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() + 1, 1); renderCalendar(); return; }
 
     if (e.target.closest('#add-item')) return addItem();
-    const ics = e.target.closest('#ics-link');
-    if (ics) {
-      const msg = document.getElementById('ics-msg');
-      if (!activeItems().length) { e.preventDefault(); msg.textContent = 'Ative pelo menos um item para criar lembretes.'; return; }
-      if (!(navigator.serviceWorker && navigator.serviceWorker.controller)) {
-        e.preventDefault();
-        msg.textContent = 'Quase lá: feche e abra o app uma vez e toque de novo.';
-      }
+    if (e.target.closest('#push-btn')) {
+      getSub().then((sub) => (sub && Notification.permission === 'granted' ? pushDisable() : pushEnable())).catch(pushEnable);
       return;
     }
+    if (e.target.closest('#push-test')) return pushTest();
 
     const del = e.target.closest('[data-del]');
     if (del) {
@@ -374,6 +478,7 @@
         const id = del.closest('.set-row').dataset.id;
         state.items = state.items.filter((i) => i.id !== id);
         save();
+        pushSyncSoon();
         return renderSettings();
       }
       del.dataset.armed = '1';
@@ -390,14 +495,13 @@
       sw.setAttribute('aria-checked', String(item.active));
       li.classList.toggle('off', !item.active);
       save();
-      refreshIcsLink();
+      pushSyncSoon();
     }
   });
 
   view.addEventListener('input', (e) => {
     const f = e.target.dataset.f;
     if (!f) return;
-    setTimeout(refreshIcsLink, 0);
     const item = state.items.find((i) => i.id === e.target.closest('.set-row').dataset.id);
     if (f === 'name') {
       const v = e.target.value.trim();
@@ -409,9 +513,10 @@
           if (chip) chip.textContent = item.abbr;
         }
         save();
+        pushSyncSoon();
       }
     }
-    if (f === 'time' && e.target.value) { item.time = e.target.value; save(); }
+    if (f === 'time' && e.target.value) { item.time = e.target.value; save(); pushSyncSoon(); }
   });
 
   view.addEventListener('focusout', (e) => {
@@ -450,6 +555,7 @@
 
   /* ---------- Início ---------- */
   go('hoje', false);
+  if (/^https?:$/.test(location.protocol)) window.addEventListener('load', () => setTimeout(pushSync, 1500));
 
   if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
     window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
