@@ -1,6 +1,6 @@
 // Service worker: guarda o app no celular para abrir offline.
 // Busca a versão nova na internet primeiro e só usa a guardada quando está offline.
-const CACHE = 'vitaminas-v5';
+const CACHE = 'vitaminas-v6';
 const ASSETS = [
   './',
   './index.html',

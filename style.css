@@ -339,3 +339,4 @@ svg { display: block; fill: none; stroke: currentColor; stroke-width: 1.8; strok
 .btn { text-decoration: none; }
 .link-del { color: var(--primary); }
 .field .link-del { color: var(--warn); }
+[hidden]{display:none!important}
