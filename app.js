@@ -347,8 +347,8 @@
       let sub = await reg.pushManager.getSubscription();
       if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlB64(VAPID_PUBLIC) });
       await api('/subscribe', { subscription: sub.toJSON(), items: payloadItems(), tz: tzName() });
-      await api('/test', { endpoint: sub.endpoint }).catch(() => {});
-      pushMsg = 'Pronto! Enviei um aviso de teste agora.';
+      const t = await api('/test', { endpoint: sub.endpoint }).catch(() => null);
+      pushMsg = t && t.ok ? 'Pronto! Enviei um aviso de teste agora.' : `Avisos ligados, mas o teste falhou${t ? ` (${t.status}${t.detail ? ': ' + t.detail : ''})` : ''}.`;
     } catch (e) {
       pushMsg = 'Não consegui ligar os avisos. Confira a internet e tente de novo.';
     } finally {
@@ -378,9 +378,9 @@
       const sub = await getSub();
       if (!sub) return;
       pushMsg = 'Enviando aviso de teste...'; pushUI();
-      await api('/test', { endpoint: sub.endpoint });
-      pushMsg = 'Aviso de teste enviado.';
-    } catch (e) { pushMsg = 'Não consegui enviar o teste agora.'; }
+      const r = await api('/test', { endpoint: sub.endpoint });
+      pushMsg = r.ok ? 'Aviso de teste enviado.' : `O teste falhou (${r.status}${r.detail ? ': ' + r.detail : ''}).`;
+    } catch (e) { pushMsg = 'Não consegui falar com o servidor agora (' + (e && e.message ? e.message : 'erro') + ').'; }
     pushUI();
   }
 

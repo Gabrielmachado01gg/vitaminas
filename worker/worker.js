@@ -88,7 +88,9 @@ export async function runDue(env, scheduledMs = Date.now(), send = sendPush) {
     const hm = localHM(minute, s.tz);
     const due = s.items.filter((i) => i.time === hm).map((i) => i.name);
     if (!due.length) continue;
-    const res = await send(env, s.sub, { title: 'Hora de tomar', body: due.join(', '), tag: `vit-${hm}`, url: './' });
+    let res;
+    try { res = await send(env, s.sub, { title: 'Hora de tomar', body: due.join(', '), tag: `vit-${hm}`, url: './' }); } catch (e) { console.log('push falhou', String(e)); continue; }
+    if (!res.ok) console.log('push status', res.status);
     sent++;
     if (res.status === 404 || res.status === 410) { delete subs[id]; changed = true; }
   }
@@ -129,8 +131,13 @@ export default {
       const subs = await loadSubs(env);
       const s = subs[await idOf(String(data.endpoint || ''))];
       if (!s) return json({ error: 'not-found' }, 404);
-      const res = await sendPush(env, s.sub, { title: 'Avisos ativados', body: 'Pronto! Você vai receber um aviso na hora de cada item.', tag: 'vit-test', url: './' });
-      return json({ ok: res.ok, status: res.status });
+      try {
+        const res = await sendPush(env, s.sub, { title: 'Avisos ativados', body: 'Pronto! Você vai receber um aviso na hora de cada item.', tag: 'vit-test', url: './' });
+        const detail = res.ok ? '' : (await res.text()).slice(0, 200);
+        return json({ ok: res.ok, status: res.status, detail });
+      } catch (e) {
+        return json({ ok: false, status: 0, detail: String(e && e.message || e).slice(0, 200) });
+      }
     }
 
     return json({ error: 'not-found' }, 404);
